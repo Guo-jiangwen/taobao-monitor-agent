@@ -1,0 +1,46 @@
+{
+  "_comment": "第1步：本地数据链路配置。第2步接 Dify 时增加 llm / notify / dify 三段。",
+  "storage": {
+    "backend": "sqlite",
+    "path": "data/monitor.db",
+    "retention_days": 180
+  },
+  "logging": {
+    "level": "INFO",
+    "audit_log": "data/audit.jsonl"
+  },
+  "scheduler": {
+    "mode": "cron",
+    "cron_expr": "17 * * * *",
+    "interval_seconds": 3600,
+    "timezone": "Asia/Shanghai",
+    "_note": "每小时第17分钟取数，避开整点高峰；大促期间由运维收紧到 30 分钟并配合风险策略降频",
+    "_dedupe_note": "别把 dedupe_ttl_seconds 调成小时级：pipeline 会自动按 interval/2 兜底截断，否则缓存吃掉定时刷新，监控再也看不到变化"
+  },
+  "risk": {
+    "global": {
+      "max_concurrent_sources": 2,
+      "politeness_jitter_ms": [120, 600]
+    },
+    "defaults": {
+      "qps": 0.5,
+      "burst": 3,
+      "daily_quota": 2000,
+      "dedupe_ttl_seconds": 600,
+      "breaker": {
+        "failure_threshold": 5,
+        "open_seconds": 60,
+        "half_open_max_attempts": 1,
+        "max_open_seconds": 3600,
+        "backoff_factor": 2.0
+      },
+      "pause_after_breaker_opens": 3,
+      "pause_after_consecutive_failures": 5,
+      "anomaly": {
+        "verify_keywords": ["验证码", "滑块", "captcha", "punish"],
+        "auth_keywords": ["登录失效", "请重新登录", "未授权", "invalid session"],
+        "rate_keywords": ["ISV_LIMIT", "TRAFFIC_LIMIT", "RESOURCE_EXCEED", "API 调用频繁"]
+      }
+    }
+  }
+}

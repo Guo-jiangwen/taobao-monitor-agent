@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="docx-page-size" content="A4">
+  <title>基于 AI 的淘宝商品与竞品监控 Agent 设计方案</title>
+  <style>
+  @page {
+    @bottom-center { content: counter(page); }
+  }
+  @page cover {
+    @bottom-center { content: none; }
+  }
+  section[role="cover"] { page: cover; }
+
+  :root {
+    /* --- design tokens: business-modern --- */
+    --typography-fontFamily-heading: 微软雅黑, Microsoft YaHei, PingFang SC;
+    --typography-fontFamily-body: 微软雅黑, Microsoft YaHei, PingFang SC;
+    --typography-fontFamily-data: DIN Next, Arial, sans-serif;
+    --typography-fontFamily-code: Consolas, Source Code Pro, monospace;
+    --typography-fontSize-h1: 20pt;
+    --typography-fontSize-h2: 11pt;
+    --typography-fontSize-h3: 10pt;
+    --typography-fontSize-body: 9pt;
+    --typography-fontSize-small: 8pt;
+    --typography-fontSize-coverTitle: 22pt;
+    --typography-fontSize-coverCategory: 14pt;
+    --typography-lineHeight-body: 1.6;
+    --typography-fontWeight-heading: 600;
+    --typography-fontWeight-body: 400;
+    --color-primary: #1565C0;
+    --color-secondary: #0288D1;
+    --color-accent: #00897B;
+    --color-text: #212121;
+    --color-textSecondary: #616161;
+    --color-heading: #1A237E;
+    --color-divider: #E0E0E0;
+    --color-background: #FFFFFF;
+    --color-surface: #F5F7FA;
+    --color-emphasis: #C62828;
+    --color-success: #2E7D32;
+    --color-stock-up: #C62828;
+    --color-stock-down: #2E7D32;
+    --color-callout-info-bg: #EEF4FB;
+    --color-callout-warn-bg: #FDECEA;
+
+    /* --- 间距标尺 --- */
+    --spacing-xxs: 0.3em;
+    --spacing-xs: 0.4em;
+    --spacing-sm: 0.5em;
+    --spacing-md: 0.6em;
+    --spacing-lg: 0.8em;
+    --spacing-xl: 1.2em;
+    --spacing-xxl: 1.6em;
+
+    /* --- 映射到模板消费的语义变量 --- */
+    --fs-h1: var(--typography-fontSize-h1);
+    --fs-h2: var(--typography-fontSize-h2);
+    --fs-h3: var(--typography-fontSize-h3);
+    --fs-body: var(--typography-fontSize-body);
+    --fs-small: var(--typography-fontSize-small);
+    --ff-heading: var(--typography-fontFamily-heading);
+    --ff-body: var(--typography-fontFamily-body);
+    --ff-data: var(--typography-fontFamily-data);
+    --ff-code: var(--typography-fontFamily-code);
+    --lh-body: var(--typography-lineHeight-body);
+    --fw-bold: 600;
+    --color-muted: var(--color-textSecondary);
+    --color-border: var(--color-divider);
+    --color-bg: var(--color-background);
+    --color-highlight: var(--color-surface);
+    --color-summary-bg: var(--color-surface);
+    --color-summary-border: var(--color-primary);
+    --summary-border-width: 4px;
+    --radius-card: 8px;
+    --spacing-paragraph: 0.75em;
+    --spacing-block: var(--spacing-xl);
+    --spacing-section: 2.2em;
+    --margin-page: 2.5cm;
+    --page-content-width: 15.6cm;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--ff-body);
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    color: var(--color-text);
+    background: var(--color-bg);
+    max-width: var(--page-content-width);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* ---------- 封面 ---------- */
+  section[role="cover"] {
+    padding: var(--margin-page) 0;
+    background: var(--color-highlight);
+    min-height: 18cm;
+  }
+  .cover-category {
+    font-size: var(--typography-fontSize-coverCategory);
+    font-family: var(--ff-heading);
+    font-weight: 700;
+    color: var(--color-primary);
+    letter-spacing: 0.08em;
+    text-align: left;
+    padding: 0 var(--margin-page);
+    margin-bottom: var(--spacing-xl);
+  }
+  section[role="cover"] > h1 {
+    font-size: var(--typography-fontSize-coverTitle);
+    font-family: var(--ff-heading);
+    font-weight: 700;
+    color: var(--color-heading);
+    text-align: left;
+    padding: 0 var(--margin-page);
+    margin-bottom: var(--spacing-lg);
+  }
+  .cover-subtitle {
+    font-size: var(--fs-h2);
+    color: var(--color-muted);
+    text-align: left;
+    padding: 0 var(--margin-page);
+    margin-bottom: var(--spacing-section);
+  }
+  .cover-meta {
+    font-size: var(--fs-small);
+    color: var(--color-muted);
+    text-align: left;
+    padding: 0 var(--margin-page);
+  }
+  .cover-meta p { margin-bottom: var(--spacing-xs); }
+
+  /* ---------- 目录 ---------- */
+  .doc-toc {
+    padding: var(--spacing-block) 0;
+    margin: var(--spacing-section) 0;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .toc-title {
+    font-weight: var(--fw-bold);
+    font-family: var(--ff-heading);
+    font-size: var(--fs-h3);
+    color: var(--color-heading);
+    margin-bottom: var(--spacing-md);
+  }
+  .toc-list, .toc-list ol, .toc-list ul {
+    list-style: none;
+    list-style-type: none;
+    padding-left: 0;
+  }
+  .toc-list li { margin-bottom: var(--spacing-xxs); text-indent: 0; }
+  .toc-list a { color: var(--color-primary); text-decoration: none; }
+
+  /* ---------- 执行摘要 ---------- */
+  .executive-summary {
+    margin: var(--spacing-section) 0;
+    padding: var(--spacing-section);
+    border-left: var(--summary-border-width) solid var(--color-summary-border);
+    background: var(--color-summary-bg);
+  }
+  .summary-header { margin-bottom: var(--spacing-block); }
+  .summary-header h2 {
+    font-size: var(--fs-h2);
+    font-family: var(--ff-heading);
+    font-weight: var(--fw-bold);
+    color: var(--color-heading);
+  }
+  .summary-badge {
+    font-size: var(--fs-small);
+    color: var(--color-muted);
+    font-style: italic;
+  }
+  table.metrics { width: 100%; border-collapse: collapse; margin-bottom: var(--spacing-block); }
+  table.metrics th, table.metrics td {
+    border: 1px solid var(--color-border);
+    padding: var(--spacing-md) var(--spacing-sm);
+    text-align: center;
+    background: var(--color-bg);
+  }
+  table.metrics th {
+    background: var(--color-highlight);
+    font-family: var(--ff-heading);
+    font-weight: var(--fw-bold);
+    color: var(--color-heading);
+  }
+  .metric-label { display: block; font-size: var(--fs-small); color: var(--color-muted); margin-bottom: var(--spacing-xxs); }
+  .metric-value {
+    display: block;
+    font-family: var(--ff-data);
+    font-size: var(--fs-h2);
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+  .summary-body p { margin-bottom: var(--spacing-paragraph); }
+
+  /* ---------- 正文 ---------- */
+  main { padding-bottom: var(--spacing-section); }
+  main h2 {
+    font-size: var(--fs-h2);
+    font-family: var(--ff-heading);
+    font-weight: var(--fw-bold);
+    color: var(--color-heading);
+    margin-top: var(--spacing-section);
+    margin-bottom: var(--spacing-paragraph);
+    padding-bottom: var(--spacing-xxs);
+    border-bottom: 2px solid var(--color-primary);
+  }
+  main h3 {
+    font-size: var(--fs-h3);
+    font-family: var(--ff-heading);
+    font-weight: var(--fw-bold);
+    color: var(--color-primary);
+    margin-top: var(--spacing-block);
+    margin-bottom: var(--spacing-paragraph);
+  }
+  main h4 {
+    font-size: var(--fs-body);
+    font-family: var(--ff-heading);
+    font-weight: 700;
+    color: var(--color-text);
+    margin-top: var(--spacing-block);
+    margin-bottom: var(--spacing-sm);
+  }
+  main p { margin-bottom: var(--spacing-paragraph); }
+  main ul, main ol { margin: 0 0 var(--spacing-paragraph) var(--spacing-xxl); }
+  main li { margin-bottom: var(--spacing-xxs); }
+  main strong { font-weight: 700; color: var(--color-heading); }
+
+  table.data { width: 100%; border-collapse: collapse; margin: var(--spacing-block) 0; font-size: var(--fs-small); }
+  table.data th, table.data td {
+    border: 1px solid var(--color-border);
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-align: left;
+    vertical-align: top;
+  }
+  table.data th {
+    background: var(--color-highlight);
+    font-family: var(--ff-heading);
+    font-weight: 600;
+    color: var(--color-heading);
+  }
+  table.data td.num { font-family: var(--ff-data); text-align: center; }
+
+  pre.code {
+    font-family: var(--ff-code);
+    font-size: var(--fs-small);
+    background: var(--color-surface);
+    border-left: 3px solid var(--color-secondary);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin: var(--spacing-block) 0;
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+  code { font-family: var(--ff-code); font-size: var(--fs-small); }
+
+  .data-emphasis { color: var(--color-emphasis); font-weight: 700; }
+
+  p.callout {
+    border-left: 3px solid var(--color-primary);
+    background: var(--color-callout-info-bg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin: var(--spacing-block) 0;
+  }
+  p.callout-warn {
+    border-left: 3px solid var(--color-emphasis);
+    background: var(--color-callout-warn-bg);
+    padding: var(--spacing-md) var(--spacing-lg);
+    margin: var(--spacing-block) 0;
+  }
+
+  .appendix {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--spacing-section);
+    margin-top: var(--spacing-section);
+  }
+  .appendix h2 {
+    font-size: var(--fs-h2);
+    font-family: var(--ff-heading);
+    font-weight: var(--fw-bold);
+    color: var(--color-heading);
+    margin-bottom: var(--spacing-paragraph);
+  }
+  .appendix p { margin-bottom: var(--spacing-paragraph); }
+  </style>
+</head>
+<body>
+  <section role="cover">
+    <p class="cover-category">技术方案设计</p>
+    <h1>基于 AI 的淘宝商品与竞品监控 Agent 设计方案</h1>
+    <p class="cover-subtitle">集成定时采集、AI 识别分析、运营建议输出与采集风险治理的一体化电商监控方案</p>
+    <div class="cover-meta">
+      <p>文档类型：技术方案设计文档</p>
+      <p>版本：V1.0</p>
+      <p>日期：2026 年 10 月</p>
+    </div>
+  </section>
+
+  <section role="body" data-page-restart="1">
+    <nav class="doc-toc" aria-label="文档目录">
+      <p class="toc-title">目 录</p>
+      <ol class="toc-list">
+        <li><a href="#s1">1　方案概述</a></li>
+        <li><a href="#s2">2　总体架构</a></li>
+        <li><a href="#s3">3　目标一：定时获取公开商品信息</a></li>
+        <li><a href="#s4">4　目标二：AI 识别与分析</a></li>
+        <li><a href="#s5">5　目标三：输出可执行的运营建议</a></li>
+        <li><a href="#s6">6　目标四：管理采集风险</a></li>
+        <li><a href="#s7">7　实现与验证</a></li>
+        <li><a href="#s8">8　部署与运行</a></li>
+        <li><a href="#s9">9　合规声明与护栏</a></li>
+        <li><a href="#s10">10　后续演进</a></li>
+      </ol>
+    </nav>
+
+    <div class="executive-summary">
+      <div class="summary-header">
+        <h2>执行摘要</h2>
+        <span class="summary-badge">Executive Summary</span>
+      </div>
+      <table class="metrics">
+        <thead>
+          <tr>
+            <th>测试用例</th>
+            <th>工作流节点</th>
+            <th>风险闸门</th>
+            <th>代码规模</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="metric-value">30 / 30</span></td>
+            <td><span class="metric-value">7 个</span></td>
+            <td><span class="metric-value">5 道</span></td>
+            <td><span class="metric-value">约 2400 行</span></td>
+          </tr>
+          <tr>
+            <td><span class="metric-label">全部通过</span></td>
+            <td><span class="metric-label">分析层链路</span></td>
+            <td><span class="metric-label">风险治理</span></td>
+            <td><span class="metric-label">Python 实现</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="summary-body">
+        <p>本方案面向电商运营场景，设计一款基于 AI 的商品与竞品监控 Agent，实现定时取数、变化识别、运营建议输出与采集风险治理四项能力，形成从数据采集到可执行动作的完整闭环。</p>
+        <p>方案的核心架构判断是<strong>两层分工</strong>：采集与风险治理沉到 Python 常驻层，AI 语义分析交给 Dify 工作流。原因是 Dify 工作流每次执行无状态，跨执行不保留变量，而限频、去重、熔断这三件事都需要记忆——把它们放进工作流编排器，等同于用 Excel 当数据库。</p>
+        <p>方案已在本地完整实现并验证：<span class="data-emphasis">30 个测试用例全部通过</span>，端到端连跑四轮稳定产出并正确分级变化事件；Dify 侧工作流内嵌代码与提示词经<span class="data-emphasis">8 个用例端到端验证全部通过</span>。</p>
+        <p>开发过程中定位并修复了若干真实缺陷，包括熔断时长被写成绝对值导致熔断失效、去重有效期长于采集间隔导致监控看不到变化、以及 AI 侧多项确定性判断被误交给模型。这些缺陷及其修法构成本方案在工程可靠性上的主要经验。</p>
+      </div>
+    </div>
+
+    <main>
+      <h2 id="s1">1　方案概述</h2>
+      <p>本章交代方案的业务来源、四项能力目标，以及方案在数据边界上的自我约束。</p>
+
+      <h3>1.1　业务背景</h3>
+      <p>电商运营的核心痛点不是"看不到数据"，而是"看不过来"。一个中腰部商家通常同时盯着 20 至 50 个竞品链接，需要关注的价格、库存、上下架、主图、标题、促销、评价七个维度，任何一项变动都可能在几小时内影响自己的流量与转化。纯人工巡检存在两个无法回避的问题：一是覆盖密度不够，人力只能保证每天看一两次；二是响应不及时，发现时往往活动已经结束。</p>
+      <p>本方案设计一个基于 AI 的商品与竞品监控 Agent，用机器完成"取数—比对—归因—出建议"的闭环，把运营从重复劳动中释放出来，只处理机器判断不了的部分。</p>
+
+      <h3>1.2　设计目标</h3>
+      <p>方案围绕四项能力目标展开：</p>
+      <ol>
+        <li><strong>定时获取信息</strong>：通过官方接口、授权数据源或其他符合平台规则的方式，按固定节奏获取公开商品信息。</li>
+        <li><strong>识别与分析内容</strong>：利用 AI 对标题、描述、价格、促销信息及评价等内容做基础识别与分析，发现商品与竞品的关键变化。</li>
+        <li><strong>输出运营建议</strong>：把监控结果转化为可执行的运营建议，例如商品信息优化、促销调整或美工素材需求。</li>
+        <li><strong>管理采集风险</strong>：设计访问频率控制、重复请求去重、异常响应识别及自动暂停等机制，降低平台访问负担，确保数据获取符合平台规则。</li>
+      </ol>
+
+      <h3>1.3　交付边界</h3>
+      <p>方案明确划出一条线：<strong>只处理公开信息，不触碰任何非授权数据</strong>。不模拟登录、不绕过验证码、不抓取需登录才可见的页面、不使用未授权第三方爬虫服务。数据来源限定为淘宝开放平台授权接口、商家自有后台导出、以及有书面授权的数据服务。这条线是方案成立的前提，也是第四项目标的根本出发点。</p>
+
+      <h2 id="s2">2　总体架构</h2>
+      <p>本章给出系统的分层结构，并说明为什么采集与风险治理不能放进工作流编排器。</p>
+
+      <h3>2.1　分层设计</h3>
+      <p>系统分为四层，各层职责单一：</p>
+      <table class="data">
+        <thead>
+          <tr><th>层次</th><th>职责</th><th>实现载体</th><th>运行位置</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>采集层</td><td>合规取数、请求签名、数据归一化</td><td>Python 适配器</td><td>常驻进程 / cron</td></tr>
+          <tr><td>治理层</td><td>限频、去重、配额、异常识别、熔断、自动暂停</td><td>Python 内核</td><td>与采集层同进程</td></tr>
+          <tr><td>分析层</td><td>语义归因、动作细化、优先级复核、告警分流</td><td>Dify 工作流</td><td>Dify 引擎</td></tr>
+          <tr><td>存储层</td><td>快照历史、事件记录、审计日志</td><td>SQLite</td><td>采集层本地</td></tr>
+        </tbody>
+      </table>
+      <p>层次之间的衔接物是<strong>快照仓库</strong>：采集层按轮次写入商品快照，分析层读取相邻两版快照的差异结果。这两层通过数据契约解耦，任一侧的实现替换都不影响另一侧。</p>
+
+      <h3>2.2　关键设计判断：为什么采集层不放进 Dify</h3>
+      <p>这是本方案最重要的一个架构判断，也是踩过弯路之后才确认的结论。</p>
+      <p>最初的设想是把四项功能全部在 Dify 里用节点拖出来。实际推演后发现，<strong>Dify 工作流每次执行都是无状态的</strong>——节点跑完，变量、分支历史、失败计数全部随这次执行结束而消失。这直接导致第四项目标中的三件事无法落地：</p>
+      <ul>
+        <li><strong>限频</strong>：需要知道"这个数据源在最近一秒内是第几个请求"，而 Dify 定时触发器到点就打，没法跨执行保留计数器。</li>
+        <li><strong>去重</strong>：需要记住"上次这个请求指纹是什么时候来的"，同样要求跨执行状态。</li>
+        <li><strong>熔断与自动暂停</strong>：需要知道"前两次失败是谁记的、连续失败了几次"，工作流编排器没有这种记忆。</li>
+      </ul>
+      <p>结论是：<strong>有状态的活儿不属于工作流编排器</strong>。这与"用 Excel 当数据库"是同一类错误——工具本身没错，是放错了层。因此最终把采集与治理沉到 Python 层，Dify 只承担它真正擅长的语义分析部分。</p>
+      <p>这个划分带来一个额外收益：采集层可以独立测试和独立部署，不依赖 Dify 可用性；Dify 重启或换版本也不会导致采集中断。</p>
+
+      <h3>2.3　技术选型</h3>
+      <table class="data">
+        <thead>
+          <tr><th>组件</th><th>选型</th><th>理由</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>采集与治理</td><td>Python 3.13</td><td>生态成熟，签名与限流逻辑可控</td></tr>
+          <tr><td>快照存储</td><td>SQLite</td><td>零依赖、单文件、支持历史版本化，便于首版验证链路</td></tr>
+          <tr><td>AI 分析编排</td><td>Dify 工作流（本地 Docker 部署）</td><td>可视化编排提示词与分支，便于运营侧参与调优</td></tr>
+          <tr><td>模型</td><td>qwen2.5:7b（本地 Ollama）</td><td>数据不出内网；经实测该任务够用，无需更大模型</td></tr>
+          <tr><td>通知（预留）</td><td>HTTP 请求节点 → 企微 / 钉钉 / 飞书</td><td>由 Dify 条件分支驱动，按优先级分流</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="s3">3　目标一：定时获取公开商品信息</h2>
+      <p>本章说明数据从哪里来、怎么签权、按什么节奏取，以及取回来如何归一化入库。</p>
+
+      <h3>3.1　数据源合规优先级</h3>
+      <p>按合规强度从高到低排列，采集层优先使用靠前的数据源：</p>
+      <table class="data">
+        <thead>
+          <tr><th>优先级</th><th>数据源</th><th>适用范围</th><th>合规依据</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1</td><td>淘宝开放平台 / 淘宝客 API</td><td>公开商品信息、竞价、类目</td><td>官方授权接口，AppKey 签名调用</td></tr>
+          <tr><td class="num">2</td><td>商家自有后台 / ERP 导出</td><td>自有商品的订单、商品、评价</td><td>商家自身数据授权</td></tr>
+          <tr><td class="num">3</td><td>第三方授权数据服务</td><td>行业数据、竞品分析</td><td>服务商书面授权</td></tr>
+          <tr><td class="num">4</td><td>本地脱敏样本</td><td>无凭据环境的链路验证</td><td>合成数据，不连接任何真实页面</td></tr>
+        </tbody>
+      </table>
+      <p>采集层对每个数据源强制要求声明合规依据，缺失即拒绝启动，从机制上防止"顺手接一个来路不明的源"。</p>
+
+      <h3>3.2　请求签名与鉴权</h3>
+      <p>调用淘宝开放平台接口采用标准的 TOP 签名流程：</p>
+      <ol>
+        <li>收集全部请求参数，含公共参数 <code>app_key</code>、<code>method</code>、<code>timestamp</code>、<code>format</code>、<code>v</code>、<code>sign_method</code>。</li>
+        <li>按参数名 ASCII 升序排序，拼接为 <code>key1value1key2value2...</code> 形式。</li>
+        <li>首尾拼接 AppSecret，计算 MD5 后转为大写，作为 <code>sign</code> 参数提交。</li>
+      </ol>
+      <p>AppSecret 只从环境变量读取，不落配置文件、不进代码仓库。</p>
+
+      <h3>3.3　调度策略</h3>
+      <p>调度采用"错峰 + 分级"策略，而非简单的固定轮询：</p>
+      <ul>
+        <li><strong>时段错峰</strong>：默认每小时第 17 分钟执行，避开整点整分的高峰时段，降低与其他应用争抢接口配额的概率。</li>
+        <li><strong>频率分级</strong>：常规期每小时一轮；大促期间由运维收紧至 30 分钟一轮，同时联动下调治理层的 QPS 上限，保证负载总量不因频率提升而失控。</li>
+        <li><strong>首轮建基线</strong>：首轮只写快照不做比对（没有历史版本可比），从第二轮起才产出变化事件。</li>
+      </ul>
+
+      <h3>3.4　数据归一化与快照</h3>
+      <p>不同数据源返回的字段名和结构差异很大，采集层统一归一化为同一份记录结构后再入库，字段包括商品标识、来源标识、标题、价格、库存、上下架状态、主图、促销、评价数、评分、SKU 列表。</p>
+      <p>每轮采集生成一份内容指纹（对关键字段做哈希），指纹相同则跳过后续比对，避免无意义的计算与写库。</p>
+
+      <h2 id="s4">4　目标二：AI 识别与分析</h2>
+      <p>识别采用<strong>两级架构</strong>：先由规则做确定性的字段级比对，再由 LLM 做语义级归因。这个分工是刻意的——规则负责"变没变、变了多少"，LLM 负责"为什么变、要不要管、该怎么办"。</p>
+
+      <h3>4.1　字段级变化检测</h3>
+      <p>对相邻两版快照逐字段比对，覆盖七个维度：</p>
+      <table class="data">
+        <thead>
+          <tr><th>维度</th><th>判定方式</th><th>关注的信号</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>上下架状态</td><td>状态值比对</td><td>竞品下架是机会，自有下架是事故</td></tr>
+          <tr><td>价格</td><td>计算变动比例</td><td>降幅、涨幅幅度</td></tr>
+          <tr><td>库存</td><td>数值比对</td><td>归零即断货</td></tr>
+          <tr><td>主图</td><td>图片标识比对</td><td>换版意味着视觉策略调整</td></tr>
+          <tr><td>标题</td><td>文本比对</td><td>新增或替换核心卖点词</td></tr>
+          <tr><td>促销</td><td>促销文本比对</td><td>活动机制变化</td></tr>
+          <tr><td>评价</td><td>数量与评分比对</td><td>评分下滑是风险信号</td></tr>
+        </tbody>
+      </table>
+      <p>每个维度都带一个<strong>角色维度</strong>（自有 / 竞品）。同一件事在两个角色下的解读完全不同：竞品下架是要抢流量，自有商品下架是要立刻排查是不是被平台处罚了。角色判断错，整条动作方向就会反过来。</p>
+
+      <h3>4.2　事件分级</h3>
+      <p>变化统一映射为四档严重度：</p>
+      <table class="data">
+        <thead>
+          <tr><th>级别</th><th>定义</th><th>典型场景</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">P0</td><td>需立即人工介入</td><td>自有商品价格异常波动、自有商品下架、竞品大幅降价</td></tr>
+          <tr><td class="num">P1</td><td>需当日处理</td><td>评分下滑、竞品下架、主图换版</td></tr>
+          <tr><td class="num">P2</td><td>可批量处理</td><td>小幅调价、标题改动</td></tr>
+          <tr><td class="num">P3</td><td>仅记录</td><td>评价数自然增长等噪音</td></tr>
+        </tbody>
+      </table>
+      <p>分级阈值集中定义在一处常量区，便于按店铺实际情况调整，避免阈值散落各处导致行为不一致。</p>
+
+      <h3>4.3　LLM 语义分析</h3>
+      <p>LLM 环节只做三件事：<strong>归因、动作细化、优先级复核</strong>。这一层的设计经过了两轮实测修正，暴露的问题很有代表性。</p>
+      <p><strong>第一轮问题</strong>：提示词没有定义 <code>role</code> 字段的取值含义（<code>self</code> / <code>competitor</code>），模型不知道归属方是谁，于是把"自有商品降价"当成"竞品降价"来分析，整段归因方向反了；给出的动作是"调整价格至 80.1 元"，而 80.1 已经是当前值，等于没有终点；优先级复核写成"分级合理，对用户影响大"，而输入数据里根本没有"用户影响"这个字段，属于凭空编造。</p>
+      <p class="callout">&nbsp;&nbsp;结论：<strong>LLM 接业务数据翻车，多数不是模型不行，而是喂给它的字段语义是模糊的</strong>。修正方式是先定义每个字段的取值含义，再让模型推断。</p>
+      <p><strong>第二轮问题</strong>：修正后模型能把两种角色分开处理了，但增加了"字段缺失时按竞品处理"的兜底条款后，<strong>连传了 <code>role</code> 的正常输入也被带偏</strong>——模型把兜底说明当成了默认行为，照样输出"输入未提供 role，按竞品处理"。这说明：<strong>兜底逻辑不能写在提示词里，小模型会把它当默认行为执行</strong>。</p>
+      <p>最终做法是把兜底前移到模型上游的代码节点：缺字段就在进入模型之前补成明确的 <code>unknown</code> 枚举值，提示词里只保留该枚举值的语义定义，不写"缺失时怎么办"。这条经验可以推广为一条通用规矩：<strong>确定性判断归代码，提示词只定义值域</strong>。</p>
+
+      <h3>4.4　实测结果</h3>
+      <p>用本地 qwen2.5:7b 对同一份输入做了多轮回归验证，最终四个场景全部通过：</p>
+      <table class="data">
+        <thead>
+          <tr><th>场景</th><th>输入</th><th>输出表现</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>双事件</td><td>自有降价 10% + 竞品下架</td><td>角色分清；自有给"立刻改回 89.0"，竞品给"接手流量，抢核心关键词投放"</td></tr>
+          <tr><td>空事件</td><td>空数组</td><td>输出"本轮无异常"，不硬凑建议</td></tr>
+          <tr><td>归属缺失</td><td>删除某条事件的 role</td><td>判为"归属未知"，动作写"人工确认归属后再定"，不猜方向</td></tr>
+          <tr><td>低优先级</td><td>竞品降价 3%</td><td>复核意见为"降幅在阈值内，维持原分级"，非无条件背书</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="s5">5　目标三：输出可执行的运营建议</h2>
+      <p>本章说明如何把"一段听起来专业的文字"改造成"下游能程序化执行的工序"，以及如何按优先级分流告警。</p>
+
+      <h3>5.1　从"文字建议"到"可执行工序"</h3>
+      <p>单纯输出一段自然语言建议，工作流到 LLM 节点就断了——下游的分支判断读不懂一段随机的文字。因此本方案的关键改造是<strong>结构化输出</strong>：LLM 返回固定 schema 的 JSON，把"是否需要立即推送"这类可程序化判断的字段显式暴露出来。</p>
+      <pre class="code">{
+  "events": [
+    {
+      "item_id": "SAMPLE-001",
+      "severity": "P0",
+      "category": "自有降价异常",
+      "attribution": "降价 10.0%，先怀疑误操作",
+      "action": "立刻改回 89.0 元",
+      "priority_keep": false,
+      "priority_reason": "自有商品异常降价需优先处理"
+    }
+  ],
+  "summary": "自有商品异常降价，需立即确认"
+}</pre>
+
+      <h3>5.2　事件分类与标准动作模板</h3>
+      <p>为了让动作有终点而不是空话，方案建立了"事件分类 → 标准动作模板"映射表：</p>
+      <table class="data">
+        <thead>
+          <tr><th>事件类别</th><th>判定条件</th><th>标准动作（须写成终点态）</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>自有降价异常</td><td>自有 + 价格 + 降幅 ≥10%</td><td>查改价记录；误操作则立刻改回原价，主动促销则核对活动配置</td></tr>
+          <tr><td>自有下架</td><td>自有 + 上下架状态变更</td><td>查是违规下架还是缺货，恢复上架或补库存</td></tr>
+          <tr><td>自有断货</td><td>自有 + 库存归零</td><td>立即补货，或将该 SKU 设为缺货预售</td></tr>
+          <tr><td>竞品降价</td><td>竞品 + 价格下降</td><td>对照跟价阈值，跟则给出新价并做利润校验，不跟则记录价差</td></tr>
+          <tr><td>竞品下架</td><td>竞品 + 上下架状态变更</td><td>接手流量：抢该商品核心关键词投放，检查自家承接页</td></tr>
+          <tr><td>竞品断货</td><td>竞品 + 库存归零</td><td>抢该词流量，确认自家库存接得住</td></tr>
+          <tr><td>主图换版</td><td>主图标识变化</td><td>评估视觉差距，向美工提素材需求</td></tr>
+          <tr><td>标题改卖点词</td><td>标题变化</td><td>核对新增核心词是否值得跟</td></tr>
+          <tr><td>促销机制变化</td><td>促销文本变化</td><td>核对活动配置，评估是否出对应券</td></tr>
+          <tr><td>评分下滑</td><td>评分下降 ≥0.2</td><td>排查近 30 天差评来源</td></tr>
+        </tbody>
+      </table>
+      <p>模板强制动作包含<strong>终点态</strong>（改成 X、立刻改回 Y、保持不变、不要跟价），明确禁止"重点关注""优化一下"这类没有终点的表述。</p>
+
+      <h3>5.3　告警分流</h3>
+      <p>结构化输出中的推送字段由<strong>代码节点按规则计算</strong>，不交给模型判断：</p>
+      <pre class="code">need_push = (severity == "P0") or (priority_keep is False)</pre>
+      <p>即 P0 事件一律推送，被模型推翻原分级的事件也推送。之所以不交给模型，是因为实测中出现过模型把 P0 事件判成不推送的情况——下游条件分支照此执行，真正的 P0 会被静默吞掉，告警功能名存实亡。</p>
+      <p>分流结果为两条路径：true 分支进入高优告警（输出摘要与事件对应的商品清单），false 分支进入日报（仅记录数量，不打扰）。</p>
+
+      <h2 id="s6">6　目标四：管理采集风险</h2>
+      <p>本章先界定风险来源，再给出五道依次生效的闸门，最后记录开发中定位到的两个真实缺陷。</p>
+
+      <h3>6.1　风险来源分析</h3>
+      <p>采集风险主要来自三个方面，方案对每一类都有对应机制：</p>
+      <ol>
+        <li><strong>调用频率超限</strong>：淘宝开放平台对应用有明确的流量规则。官方文档载明，应用处于正式环境测试状态时每天调用上限为 5000 次，应用上线后默认额度为 100 万次/天；提额需要满足最近 7 天 API 成功率不低于 98%、且当前有效访问总量已达到现有额度 50% 等条件，并且只能逐级申请。超限时接口返回错误码 7，<code>sub_code</code> 为 <code>accesscontrol.limited-by-dynamic-access-count</code>（单接口总量限制，与单个 AppKey 无关，一般无法调整，只能稍后重试）或 <code>accesscontrol.limited-by-app-api-access-count</code>（单 AppKey 对某接口的频率限制），报错信息通常附带"This ban will last for ** more seconds"提示等待时长。</li>
+        <li><strong>重复请求</strong>：同一商品短时间内反复取数，对平台和自己都是浪费。</li>
+        <li><strong>异常响应</strong>：包括触发验证、登录失效、接口报错、返回内容与请求不匹配等。</li>
+      </ol>
+
+      <h3>6.2　五道闸门</h3>
+      <p>治理层设计了五道依次生效的闸门：</p>
+      <p><strong>第一道：令牌桶限频。</strong>按速率匀速补充令牌，桶容量允许一定突发。选令牌桶而不是固定间隔 sleep，是因为真实场景存在"整点批量刷新几十个竞品"的突发需求，固定间隔会把这类请求强行拉平，反而拖长整体耗时。实现上按时间差一次性补足令牌，并使用单调时钟计时——采集进程连续运行数天，若使用系统墙钟，一旦发生时间同步将时钟回拨，就会计算出负的时间差，凭空补出一整桶令牌，限频直接失效。</p>
+      <p><strong>第二道：请求去重。</strong>对请求内容生成指纹并缓存，在有效期内命中即直接返回缓存结果，不再发起网络请求。这里有一个必须守住的约束：<strong>去重有效期必须严格小于采集间隔</strong>。早期配置中去重有效期为 7200 秒而采集间隔为 3600 秒，导致缓存把下一轮的定时刷新整个吃掉，实际每两小时才真正取数一次，监控等于没开。修正方式是在管线层自动按"间隔的一半"截断去重有效期，从机制上杜绝这个配置陷阱。</p>
+      <p><strong>第三道：日配额硬停。</strong>按数据源与自然日计数，跨天自动清零，触达上限即硬性停止，不依赖"自觉"。</p>
+      <p><strong>第四道：异常响应识别。</strong>对错误状态码与响应正文做关键词与错误码双重分类，区分限流、鉴权失效、触发验证、空数据、内容不匹配五类，并据此决定后续动作。</p>
+      <p><strong>第五道：熔断与自动暂停。</strong>连续失败达到阈值即打开熔断，后续请求直接拒绝并返回剩余等待时长，避免在平台已经限流的情况下继续施压。熔断时长按指数退避逐次拉长，并设上限。当熔断反复打开或连续失败累积到阈值时，该数据源被自动暂停，必须由人工显式恢复。</p>
+
+      <h3>6.3　一次真实的失败判定链路</h3>
+      <p>当某次请求失败时，处理顺序是：分类异常类型 → 若为限流类则触发熔断 → 熔断打开时记录开闸次数 → 开闸次数或连续失败数触达阈值则暂停该源并记录原因 → 同时写入审计日志。整条链路的每一步都留痕，便于事后回溯"为什么这个源停了"。</p>
+
+      <h3>6.4　实测踩坑记录</h3>
+      <p>开发过程中定位到两个真实缺陷，两个都不是逻辑写错，而是<strong>语义理解偏差</strong>，值得记录：</p>
+      <ol>
+        <li><strong>熔断时长被写成绝对值</strong>。熔断到期时间本应是"当前时刻 + 持续时长"，代码中误写成单纯的持续时长（如 300.0），导致与当前时间比较时永远已经过期，熔断实际形同虚设。修正为"当前时刻 + 时长"后，熔断才真正生效。这类缺陷的危险之处在于"看起来在跑"，只有专门针对熔断行为的测试才能发现。</li>
+        <li><strong>测试自身假设了时间不流逝</strong>。并发限频用例原先把令牌补充速率设为 1000/秒，断言"8 个线程恰好拿到 50 个令牌"。实际上线程调度耗时超过 1 毫秒，桶在此期间会合法补充出额外令牌，断言必然随机失败。这不是实现的并发缺陷，而是测试没有把"补令牌"这个变量控制住。修正方式是将其余量压到可忽略的量级，让用例只在测"扣减是否原子"。</li>
+      </ol>
+
+      <h2 id="s7">7　实现与验证</h2>
+      <p>本章给出工程结构、测试与端到端验证的真实结果，并收束全文最核心的一条设计原则。</p>
+
+      <h3>7.1　工程结构</h3>
+      <p>方案已完整实现为可运行工程，共约 2400 行 Python 代码：</p>
+      <table class="data">
+        <thead>
+          <tr><th>模块</th><th>职责</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>风险治理内核</td><td>令牌桶限频、日配额、去重、异常分类、熔断、自动暂停</td></tr>
+          <tr><td>请求指纹</td><td>请求内容指纹生成与比对</td></tr>
+          <tr><td>采集适配器</td><td>适配器基类、淘宝开放平台签名实现、脱敏样本源、注册表</td></tr>
+          <tr><td>变化检测</td><td>字段级比对与 P0 至 P3 分级</td></tr>
+          <tr><td>快照仓库</td><td>SQLite 快照与事件存储</td></tr>
+          <tr><td>编排管线</td><td>采集、落库、比对、分级、健康报告</td></tr>
+          <tr><td>命令行入口</td><td>单轮执行、多轮连跑、常驻、报告、恢复</td></tr>
+        </tbody>
+      </table>
+
+      <h3>7.2　测试与验证结果</h3>
+      <p><strong>单元与集成测试：<span class="data-emphasis">30 个用例全部通过</span>。</strong></p>
+      <p>覆盖范围包括：令牌桶的突发能力、补充速率、容量上限、并发不超发；风险治理的限频、去重命中、配额硬停、异常分类、熔断开关、自动暂停与人工恢复；以及端到端的采集、落库、比对、分级全链路。</p>
+      <p><strong>端到端实测：连跑四轮的真实输出。</strong></p>
+      <pre class="code">cycle 1: fetched=3  saved=3   events=0   top=P3   （首轮建基线）
+cycle 2: fetched=6  saved=6   events=4   top=P1   [P1] 评分下滑 / [P1] 价格变动 +11.1%
+cycle 3: fetched=9  saved=9   events=6   top=P0   [P0] 价格变动 -14.3% / [P1] 评分下滑
+cycle 4: fetched=12 saved=12  events=9   top=P0   [P0] 价格变动 -10.0% / [P1] 价格变动 +16.7%</pre>
+      <p>首轮无事件（无历史基线可比对）是预期行为；从第二轮起稳定产出变化事件并正确分级。</p>
+      <p><strong>Dify 工作流：7 个节点</strong>，链路为"开始 → 输入归一化 → LLM 分析 → 结果解析与规则判定 → 条件分支 → 高优告警 / 进日报"。</p>
+      <p>工作流内嵌的代码与提示词经过端到端本地验证，8 个用例全部通过，其中 4 个为模型用例、4 个为确定性的容错用例（含"模型把摘要字段误塞进事件数组""输出被代码块标记包裹""输出完全是无关文字"等畸形输入）。验证过程中确实抓到一次真实缺陷：模型把摘要字段塞进了事件数组，导致事件计数从 1 变成 2，属于不报错的静默数据污染；修法是在代码节点做确定性校验，剔除没有商品标识的伪元素，并把被误放的位置捞回。</p>
+
+      <h3>7.3　两层职责的最终划分</h3>
+      <table class="data">
+        <thead>
+          <tr><th>事项</th><th>归属</th><th>理由</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>限频、去重、配额、熔断、暂停</td><td>采集层代码</td><td>需要跨轮次状态</td></tr>
+          <tr><td>字段级比对、事件分级、推送判定、格式校验</td><td>代码节点</td><td>确定性规则，结果必须可复现</td></tr>
+          <tr><td>归因、动作细化、优先级复核</td><td>LLM</td><td>需要语义理解与上下文判断</td></tr>
+        </tbody>
+      </table>
+      <p class="callout">&nbsp;&nbsp;这条分界线是本方案最核心的设计原则：<strong>规则能写死的，绝不交给模型自由发挥</strong>。</p>
+
+      <h2 id="s8">8　部署与运行</h2>
+      <p>本章给出采集层与分析层的实际运行方式，并说明一个容易误判的调试开关。</p>
+
+      <h3>8.1　采集层</h3>
+      <pre class="code"># 单轮执行（供 cron 调用）
+python main.py once
+
+# 连跑多轮验证链路（调试时关闭去重缓存，否则第二轮起全部命中缓存、比对恒为空）
+python main.py once --cycles 4 --no-dedupe
+
+# 常驻模式
+python main.py cron
+
+# 查看最近事件与健康报告
+python main.py report</pre>
+      <p><code>--no-dedupe</code> 是调试专用开关。生产环境不开启，否则会失去重复请求去重的保护。</p>
+
+      <h3>8.2　分析层</h3>
+      <p>分析层以工作流文件形式交付，可直接导入 Dify：进入工作室，选择"创建应用 → 导入 DSL 文件"，导入后确认 LLM 节点的模型配置即可运行。</p>
+
+      <h2 id="s9">9　合规声明与护栏</h2>
+      <p>方案设有五条硬性护栏：</p>
+      <ol>
+        <li><strong>数据来源白名单</strong>：只允许官方接口、自有后台、有书面授权的服务商；每个数据源必须声明合规依据，缺失即拒绝启动。</li>
+        <li><strong>不触碰非公开数据</strong>：不模拟登录、不绕过验证码、不抓取需登录可见的内容。</li>
+        <li><strong>访问量自我约束</strong>：限频与日配额双重约束，实际调用量控制在授权额度的安全水位以下。</li>
+        <li><strong>异常即收敛</strong>：一旦识别到限流、验证或鉴权失效，立即熔断而非重试加码。</li>
+        <li><strong>全链路留痕</strong>：每次请求的成功与失败均写入审计日志，可回溯、可举证。</li>
+      </ol>
+
+      <h2 id="s10">10　后续演进</h2>
+      <p>当前版本已完成链路闭环，下一步可按三个方向推进：</p>
+      <ol>
+        <li><strong>接入真实数据源</strong>：将脱敏样本源替换为淘宝开放平台接口，验证签名、频控与真实返回结构的适配。</li>
+        <li><strong>打通告警通道</strong>：把条件分支的 true 分支替换为 HTTP 请求节点，接入企微、钉钉或飞书。</li>
+        <li><strong>补充反馈闭环</strong>：记录运营对建议的采纳情况，用采纳率反向优化动作模板与分级阈值，让系统随使用逐步贴合店铺实际。</li>
+      </ol>
+      <p>需要说明的是，第二项演进会引入一个新的设计问题：采集层与分析层之间的数据契约校验应该放在哪一侧。放在 Dify 侧可以让工作流对上游变化更健壮，放在采集侧可以更早拦截脏数据、避免把问题带到模型面前。这个问题需要在接入真实数据源时结合接口稳定性一并决策。</p>
+    </main>
+
+    <div class="appendix">
+      <h2>附：核心设计原则小结</h2>
+      <p>本方案在实现过程中沉淀出三条可复用的设计原则，其价值不限于本项目：</p>
+      <ol>
+        <li><strong>有状态的活儿不进工作流编排器</strong>。限频、去重、熔断、计数，凡需要跨执行记忆的逻辑，都应沉到独立服务或代码层。编排器负责流程，不负责状态。</li>
+        <li><strong>确定性判断归代码，提示词只定义值域</strong>。字段兜底、格式校验、推送判定、分类映射，这些结果必须可复现的逻辑，一旦交给模型就会引入不可预测性；提示词的职责是定义语义，不是承载规则。</li>
+        <li><strong>接业务数据给模型之前，先定义每个字段的含义</strong>。多数"模型变笨"的现象，根因是输入语义模糊，而非模型能力不足。先补字段定义，再考虑换模型。</li>
+      </ol>
+    </div>
+  </section>
+</body>
+</html>

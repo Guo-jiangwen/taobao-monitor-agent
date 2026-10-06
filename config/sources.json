@@ -1,0 +1,59 @@
+{
+  "_comment": "数据源声明 + 监控目标。所有 source 必须写明合规依据，无依据的一律不启用。",
+  "sources": [
+    {
+      "id": "taobao_open",
+      "enabled": true,
+      "adapter": "top_api",
+      "display_name": "淘宝开放平台 / 淘宝客",
+      "compliance": "official_api",
+      "compliance_note": "淘宝开放平台官方 API，AppKey 已备案并使用 IP 白名单 + 签名鉴权",
+      "host": "gw.api.taobao.com",
+      "endpoint": "router/router",
+      "api": "taobao.tbk.dg.material.optional",
+      "qps": 0.5,
+      "burst": 3,
+      "daily_quota": 500,
+      "dedupe_ttl_seconds": 7200,
+      "credentials_env": ["TAOBAO_APP_KEY", "TAOBAO_APP_SECRET"],
+      "params": {
+        "app_key": "${TAOBAO_APP_KEY}",
+        "format": "json",
+        "v": "2.0",
+        "sign_method": "md5"
+      }
+    },
+    {
+      "id": "own_shop_backend",
+      "enabled": true,
+      "adapter": "own_shop",
+      "display_name": "自有店铺商家后台导出",
+      "compliance": "own_data",
+      "compliance_note": "本店铺自有商品与订单数据，经商家后台授权导出，不涉及第三方数据",
+      "host": "127.0.0.1",
+      "daily_quota": 200,
+      "qps": 1.0
+    },
+    {
+      "id": "sample_local",
+      "enabled": true,
+      "adapter": "sample",
+      "display_name": "脱敏样本源（无凭证本地跑通）",
+      "compliance": "synthetic",
+      "compliance_note": "用于链路自测的模拟数据，绝不接入真实商品，仅测试用",
+      "host": "localhost",
+      "daily_quota": 500,
+      "qps": 2.0
+    }
+  ],
+  "targets": [
+    { "item_id": "SAMPLE-001", "title": "自有主推款", "role": "self", "priority": 1 },
+    { "item_id": "SAMPLE-002", "title": "竞品A", "role": "competitor", "priority": 1 },
+    { "item_id": "SAMPLE-003", "title": "竞品B", "role": "competitor", "priority": 2 }
+  ],
+  "competitor_watch": {
+    "_note": "竞品优先采集：价格/库存/主图变更对运营决策影响最大",
+    "priority_1": ["price", "stock", "main_image", "promotion", "listing_status"],
+    "priority_2": ["title", "review_count", "rating"]
+  }
+}

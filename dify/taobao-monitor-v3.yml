@@ -1,0 +1,450 @@
+app:
+  description: '淘宝商品与竞品监控 —— 把采集器产出的变化事件，转成可执行的运营建议与告警分流。
+
+    链路：开始 → 输入归一化(Code) → LLM 分析 → 结果解析(Code) → 条件分支 → 结束。
+
+    设计要点：确定性判断（字段兜底、是否推送）全放 Code 节点，LLM 只做归因、动作细化、优先级复核。'
+  icon: 🛒
+  icon_background: '#FFEAD5'
+  mode: workflow
+  name: 淘宝商品竞品监控-运营建议
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.3.1
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+      - .JPG
+      - .JPEG
+      - .PNG
+      - .GIF
+      - .WEBP
+      - .SVG
+      allowed_file_types:
+      - image
+      allowed_file_upload_methods:
+      - local_file
+      - remote_url
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+        - local_file
+        - remote_url
+      number_limits: 3
+    opening_statement: ''
+    retriever_resource:
+      enabled: true
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: start
+        targetType: code
+      id: 1740000000001-source-1740000000002-target
+      source: '1740000000001'
+      sourceHandle: source
+      target: '1740000000002'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: llm
+      id: 1740000000002-source-1740000000003-target
+      source: '1740000000002'
+      sourceHandle: source
+      target: '1740000000003'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: llm
+        targetType: code
+      id: 1740000000003-source-1740000000004-target
+      source: '1740000000003'
+      sourceHandle: source
+      target: '1740000000004'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: code
+        targetType: if-else
+      id: 1740000000004-source-1740000000005-target
+      source: '1740000000004'
+      sourceHandle: source
+      target: '1740000000005'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: end
+      id: 1740000000005-true-1740000000006-target
+      source: '1740000000005'
+      sourceHandle: 'true'
+      target: '1740000000006'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        isInLoop: false
+        sourceType: if-else
+        targetType: end
+      id: 1740000000005-false-1740000000007-target
+      source: '1740000000005'
+      sourceHandle: 'false'
+      target: '1740000000007'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: 采集器每轮把变化事件以 JSON 字符串灌进来
+        selected: false
+        title: 开始
+        type: start
+        variables:
+        - label: 变化事件JSON
+          max_length: null
+          options: []
+          required: true
+          type: text-input
+          variable: diff_events
+      height: 92
+      id: '1740000000001'
+      position:
+        x: 30
+        y: 300
+      positionAbsolute:
+        x: 30
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import json\n\n\ndef main(diff_events: str) -> dict:\n    # 输入归一化：确定性判断前移到模型之前，别让 LLM 去猜字段缺失怎么办。\n    # 教训：提示词里写「缺 role 就按 competitor 处理」，小模型会把兜底句当默认行为，\n    # 传了 role 的 case 也照样输出「输入未提供 role」。所以缺字段在代码里拦掉。\n    try:\n        data = json.loads(diff_events or \"[]\")\n    except Exception:\n        data = []\n    if not isinstance(data, list):\n        data = []\n\n    for ev in data:\n        if isinstance(ev, dict) and not ev.get(\"role\"):\n            ev[\"role\"] = \"unknown\"\n\n    return {\"events_json\": json.dumps(data, ensure_ascii=False)}\n"
+        code_language: python3
+        desc: 解析入参、补全缺失的 role，再把规范化后的 JSON 交给 LLM
+        outputs:
+          events_json:
+            children: null
+            type: string
+        selected: false
+        title: 输入归一化
+        type: code
+        variables:
+        - value_selector:
+          - '1740000000001'
+          - diff_events
+          value_type: string
+          variable: diff_events
+      height: 54
+      id: '1740000000002'
+      position:
+        x: 330
+        y: 300
+      positionAbsolute:
+        x: 330
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 只做归因、动作细化、优先级复核 —— 分类和推送由规则层负责
+        title: LLM 运营分析
+        type: llm
+        model:
+          provider: langgenius/ollama/ollama
+          name: qwen2.5:7b
+          mode: chat
+          completion_params:
+            temperature: 0.2
+        prompt_template:
+        - role: system
+          text: |-
+            你是电商运营分析师。输入是本轮监控采集到的商品变化事件（JSON 字符串）。
+
+            【输入字段含义】
+            - role（三选一，取值只可能是这三个，绝不能自己造第四个）:
+              self      = 你自己店铺的商品
+              competitor = 竞品
+              unknown   = 归属未确认，采集层没拿到归属信息
+            - severity: P0/P1/P2/P3 是系统按规则已打的分级，你可以推翻但必须给理由
+              注：P3 是系统内部级别，向运营输出时不要单独当作一条告警
+            - field: 变化的字段（listing_status / price / stock / main_image / title / promotion / rating）
+            - old_value / new_value: 变化前后的值
+
+            【事件分类判定（按 role + field 判定，只能从下面选一个）】
+            "自有降价异常" | "自有普通调价" | "自有下架" | "自有断货"
+            "竞品降价"     | "竞品下架"     | "竞品断货"
+            "主图换版"     | "标题改卖点词" | "促销机制变化" | "评分下滑"
+            "归属未知"
+
+            判定规则：
+            - role=unknown -> 归属未知（此时不要猜归属，动作一律写「人工确认归属后再定」）
+            - role=self 且 field=price 且降幅>=10%   -> 自有降价异常
+            - role=self 且 field=price 其他情况      -> 自有普通调价
+            - field=listing_status 且 new_value 不是 on_sale -> 按 role 分 自有/竞品 下架
+            - field=stock 且 new_value==0           -> 按 role 分 自有/竞品 断货
+            - field=main_image 有变化                -> 主图换版
+            - field=title 有变化                     -> 标题改卖点词
+            - field=promotion 有变化                 -> 促销机制变化
+            - field=rating 下降>=0.2                -> 评分下滑
+
+            【各类标准动作模板 —— 必须命中对应的一条，并写成终点态】
+            - 自有降价异常：先查商家后台改价记录；若为误操作 -> 立刻改回 old_value；
+              若为主动促销 -> 核对活动配置与券叠加规则
+            - 自有下架：查是被平台违规下架还是缺货，恢复上架或补库存
+            - 自有断货：立即补货，或把该 SKU 设为缺货预售
+            - 竞品降价：对照跟价阈值给结论 —— 跟（写出新价并做利润校验）或不跟（记录价差）
+            - 竞品下架：接手流量 —— 抢该商品核心关键词的投放，检查自家承接页是否就绪
+            - 竞品断货：抢该词流量，并确认自家该词库存接得住
+            - 主图换版：评估与自家主图的视觉差距，向美工提素材需求
+            - 标题改卖点词：核对新增核心词是否值得跟，必要时补同类卖点词
+            - 促销机制变化：核对活动配置，评估自己是否要出对应券
+            - 评分下滑：排查近 30 天差评来源
+
+            【输出要求】
+            1. 先逐条判定事件类别（category），再按上面的模板给动作。
+               动作必须是终点态，形如「改成 X」「立刻改回 Y」「保持不变」「不要跟价」「向美工提 XX 素材需求」。
+               禁止输出「重点关注」「优化一下」「加强关注」这类没有终点的表述
+            2. 归因：只依据输入字段推断，方向跟着 role 走
+            3. 优先级复核：必须给结论（维持 或 推翻）+ 理由；数据不足以判断就直接说数据不足。
+               禁止无条件写「分级合理」
+            4. 只输出一个 JSON 对象，不要加 ```json 标记，不要有任何前言后语：
+
+            {"events":[{"item_id":"...","severity":"P0","category":"自有降价异常","attribution":"...","action":"...","priority_keep":false,"priority_reason":"..."}],"summary":"一句话总览"}
+
+            字段定义：
+            - item_id: 原样照抄
+            - severity: 原样照抄输入里这条事件的分级
+            - category: 只能从上面的枚举里选，严格照抄
+            - attribution: 归因，一句话
+            - action: 可执行动作，必须含终点态
+            - priority_keep: 是否维持原分级，布尔
+            - priority_reason: 复核理由，必须能支撑上面的布尔值
+            - summary: 整批事件的一句话总览
+
+            【重要：不要输出 need_push】
+            是否需要推送告警是纯规则（P0 或你推翻了原分级就要推），代码节点会自己算。
+            你算不准，写错了下游就漏告警。只管好 priority_keep 和 priority_reason 这两个。
+
+            【硬约束】
+            - 只输出 JSON
+            - 不得编造输入里不存在的字段
+            - 输入为空时输出 {"events":[],"summary":"本轮无异常"}
+        - role: user
+          text: |-
+            本轮监控采集到的变化事件如下：
+
+            {{#1740000000002.events_json#}}
+
+            按系统提示词的要求输出 JSON。
+        vision:
+          enabled: false
+          configs:
+            variable_selector: []
+        memory:
+          enabled: false
+          window:
+            enabled: false
+            size: 50
+        context:
+          enabled: false
+          variable_selector: []
+        structured_output:
+          enabled: false
+        retry_config:
+          enabled: false
+          max_retries: 1
+          retry_interval: 1000
+          exponential_backoff:
+            enabled: false
+            multiplier: 2
+            max_interval: 10000
+      height: 98
+      id: '1740000000003'
+      position:
+        x: 630
+        y: 300
+      positionAbsolute:
+        x: 630
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: "import json\nimport re\n\n\ndef main(llm_output: str) -> dict:\n    # 容错解析：LLM 输出不是 100% 干净的，一次解析失败就是一次漏告警。\n    text = str(llm_output or \"\").strip()\n    match = re.search(r\"\\{[\\s\\S]*\\}\", text)\n    payload = {}\n    if match:\n        try:\n            payload = json.loads(match.group(0))\n        except Exception:\n            payload = {}\n    else:\n        try:\n            payload = json.loads(text)\n        except Exception:\n            payload = {}\n\n    events = payload.get(\"events\") or []\n    if not isinstance(events, list):\n        events = []\n\n    # 剔除模型偶发产生的「伪事件」：实测它会把 summary 误塞进 events 数组，\n    # 生成 {\"summary\": \"...\"} 这种没有 item_id 的元素。不滤掉就会污染事件数和下游渲染。\n    # 这类校验是确定性的，放代码里比再写一段提示词要求它「注意格式」可靠得多。\n    if not payload.get(\"summary\"):\n        for _x in events:\n            if isinstance(_x, dict) and _x.get(\"summary\") and not _x.get(\"item_id\"):\n                payload[\"summary\"] = _x[\"summary\"]\n                break\n    events = [e for e in events if isinstance(e, dict) and e.get(\"item_id\")]\n\n    # need_push 是纯规则，交给模型判会漏告警：\n    # 实测见过它把 severity=P0 的事件判成 need_push=false。\n    # 规则：P0 一律推；被模型推翻了原分级的（priority_keep=false）也要推。\n    pushed = []\n    for ev in events:\n        if not isinstance(ev, dict):\n            continue\n        keep = ev.get(\"priority_keep\")\n        is_p0 = str(ev.get(\"severity\", \"\")).upper() == \"P0\"\n        ev[\"need_push\"] = is_p0 or keep is False\n        if ev[\"need_push\"]:\n            pushed.append(ev.get(\"item_id\"))\n\n    return {\n        \"events\": events,\n        \"summary\": payload.get(\"summary\") or \"\",\n        \"event_count\": len(events),\n        \"need_push\": bool(pushed),\n        \"pushed_items\": pushed,\n    }\n"
+        code_language: python3
+        desc: JSON 容错解析 + 按规则算 need_push，供条件分支读
+        outputs:
+          events:
+            children: null
+            type: array[object]
+          summary:
+            children: null
+            type: string
+          event_count:
+            children: null
+            type: number
+          need_push:
+            children: null
+            type: boolean
+          pushed_items:
+            children: null
+            type: array[string]
+        selected: false
+        title: 结果解析与规则判定
+        type: code
+        variables:
+        - value_selector:
+          - '1740000000003'
+          - text
+          value_type: string
+          variable: llm_output
+      height: 54
+      id: '1740000000004'
+      position:
+        x: 930
+        y: 300
+      positionAbsolute:
+        x: 930
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        cases:
+        - case_id: 'true'
+          conditions:
+          - comparison_operator: '='
+            id: 6f1a3c2e-1d4b-4a55-9c77-2b8e0f5a1d33
+            value: true
+            varType: boolean
+            variable_selector:
+            - '1740000000004'
+            - need_push
+          id: 'true'
+          logical_operator: and
+        desc: need_push 为 true 时走立即告警
+        selected: false
+        title: 是否需要立即告警
+        type: if-else
+      height: 126
+      id: '1740000000005'
+      position:
+        x: 1230
+        y: 300
+      positionAbsolute:
+        x: 1230
+        y: 300
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 高优告警 —— 下一步把这里换成 HTTP 请求节点推到企微/钉钉/飞书
+        outputs:
+        - value_selector:
+          - '1740000000004'
+          - summary
+          value_type: string
+          variable: summary
+        - value_selector:
+          - '1740000000004'
+          - pushed_items
+          value_type: array[string]
+          variable: pushed_items
+        selected: false
+        title: 高优告警
+        type: end
+      height: 118
+      id: '1740000000006'
+      position:
+        x: 1540
+        y: 200
+      positionAbsolute:
+        x: 1540
+        y: 200
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 低优先级 —— 攒进日报即可，不打扰
+        outputs:
+        - value_selector:
+          - '1740000000004'
+          - summary
+          value_type: string
+          variable: summary
+        - value_selector:
+          - '1740000000004'
+          - event_count
+          value_type: number
+          variable: event_count
+        selected: false
+        title: 进日报
+        type: end
+      height: 118
+      id: '1740000000007'
+      position:
+        x: 1540
+        y: 400
+      positionAbsolute:
+        x: 1540
+        y: 400
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: -60
+      y: -60
+      zoom: 0.62

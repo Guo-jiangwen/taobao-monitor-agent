@@ -1,0 +1,41 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# ---- 运行时数据（绝对不要提交）----
+# 本地快照数据库、审计日志、临时输出
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.jsonl
+*.log
+run_tmp.txt
+audit.jsonl
+
+# ---- 本地凭据（务必不要提交 AppSecret）----
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- 文档流水线中间产物 ----
+output/*/stage2/intermediate/
+output/*/working/
+output/*/trace/

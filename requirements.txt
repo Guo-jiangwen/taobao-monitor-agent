@@ -1,0 +1,10 @@
+# 采集与治理层：仅依赖标准库
+#
+# 运行 `python main.py once` 不需要安装任何第三方包。
+# 下面这些依赖只被辅助脚本使用（提示词回归验证 / Dify DSL 验证）。
+#
+# 安装：
+#   pip install -r requirements.txt
+
+# 提示词与 DSL 回归验证脚本读取 YAML 用（scripts/verify_dify_dsl.py）
+PyYAML>=6.0,<7
