@@ -159,7 +159,7 @@ workflow:
       type: custom
       width: 244
     - data:
-        code: "import json\n\n\ndef main(diff_events: str) -> dict:\n    # 输入归一化：确定性判断前移到模型之前，别让 LLM 去猜字段缺失怎么办。\n    # 教训：提示词里写「缺 role 就按 competitor 处理」，小模型会把兜底句当默认行为，\n    # 传了 role 的 case 也照样输出「输入未提供 role」。所以缺字段在代码里拦掉。\n    try:\n        data = json.loads(diff_events or \"[]\")\n    except Exception:\n        data = []\n    if not isinstance(data, list):\n        data = []\n\n    for ev in data:\n        if isinstance(ev, dict) and not ev.get(\"role\"):\n            ev[\"role\"] = \"unknown\"\n\n    return {\"events_json\": json.dumps(data, ensure_ascii=False)}\n"
+        code: "import json\n\n\ndef _classify(ev: dict) -> str:\n    # 分类是纯确定性判断（role + field + 阈值），必须由代码算。\n    # 交给模型会出现两个问题：同一输入两次跑出不同类别；边界值（如降幅正好 10%）判错。\n    role = ev.get(\"role\")\n    if role == \"unknown\":\n        return \"归属未知\"\n    field = ev.get(\"field\")\n    old, new = ev.get(\"old_value\"), ev.get(\"new_value\")\n\n    if field == \"price\":\n        if role == \"self\":\n            if isinstance(old, (int, float)) and isinstance(new, (int, float)) and old:\n                if (old - new) / old >= 0.10:\n                    return \"自有降价异常\"\n            return \"自有普通调价\"\n        return \"竞品降价\"\n    if field == \"listing_status\":\n        if new != \"on_sale\":\n            return \"自有下架\" if role == \"self\" else \"竞品下架\"\n        return \"\"\n    if field == \"stock\":\n        if new == 0:\n            return \"自有断货\" if role == \"self\" else \"竞品断货\"\n        return \"\"\n    if field == \"main_image\":\n        return \"主图换版\"\n    if field == \"title\":\n        return \"标题改卖点词\"\n    if field == \"promotion\":\n        return \"促销机制变化\"\n    if field == \"rating\":\n        if isinstance(old, (int, float)) and isinstance(new, (int, float)) and old - new >= 0.2:\n            return \"评分下滑\"\n        return \"\"\n    return \"\"\n\n\ndef main(diff_events: str) -> dict:\n    # 输入归一化：确定性判断一律前移到模型之前。\n    # 1) 缺 role 直接标 unknown —— 别让模型猜归属，猜错整条动作方向就反了\n    #    （自有下架是故障要恢复，竞品下架是机会要抢流量）\n    # 2) category 按固定规则算好塞进事件里 —— 模型只负责照抄，不再自己分类\n    try:\n        data = json.loads(diff_events or \"[]\")\n    except Exception:\n        data = []\n    if not isinstance(data, list):\n        data = []\n\n    for ev in data:\n        if not isinstance(ev, dict):\n            continue\n        if not ev.get(\"role\"):\n            ev[\"role\"] = \"unknown\"\n        ev[\"category\"] = _classify(ev)\n\n    return {\"events_json\": json.dumps(data, ensure_ascii=False)}\n"
         code_language: python3
         desc: 解析入参、补全缺失的 role，再把规范化后的 JSON 交给 LLM
         outputs:
@@ -213,26 +213,16 @@ workflow:
             - field: 变化的字段（listing_status / price / stock / main_image / title / promotion / rating）
             - old_value / new_value: 变化前后的值
 
-            【事件分类判定（按 role + field 判定，只能从下面选一个）】
-            "自有降价异常" | "自有普通调价" | "自有下架" | "自有断货"
-            "竞品降价"     | "竞品下架"     | "竞品断货"
-            "主图换版"     | "标题改卖点词" | "促销机制变化" | "评分下滑"
-            "归属未知"
-
-            判定规则：
-            - role=unknown -> 归属未知（此时不要猜归属，动作一律写「人工确认归属后再定」）
-            - role=self 且 field=price 且降幅>=10%   -> 自有降价异常
-            - role=self 且 field=price 其他情况      -> 自有普通调价
-            - field=listing_status 且 new_value 不是 on_sale -> 按 role 分 自有/竞品 下架
-            - field=stock 且 new_value==0           -> 按 role 分 自有/竞品 断货
-            - field=main_image 有变化                -> 主图换版
-            - field=title 有变化                     -> 标题改卖点词
-            - field=promotion 有变化                 -> 促销机制变化
-            - field=rating 下降>=0.2                -> 评分下滑
+            【事件分类】
+            每条事件的 category 已由上游代码按固定规则算好，写在事件的 category 字段里。
+            你必须原样照抄到输出的 category，禁止自己重新分类或改动。
+            如果某条事件的 category 是空字符串，说明规则未覆盖这种情况，你输出「待人工判定」。
 
             【各类标准动作模板 —— 必须命中对应的一条，并写成终点态】
-            - 自有降价异常：先查商家后台改价记录；若为误操作 -> 立刻改回 old_value；
-              若为主动促销 -> 核对活动配置与券叠加规则
+            - 自有降价异常：输入中没有改价记录，你无法区分是误操作还是主动促销。
+              attribution 只能写「需人工确认是误操作还是主动促销」，禁止断言成其中一种；
+              action 必须写「查商家后台改价记录后再决定」，禁止直接写「保持不变」或「改回原价」
+              —— 你没有依据做这个判断，把判断权交回给人
             - 自有下架：查是被平台违规下架还是缺货，恢复上架或补库存
             - 自有断货：立即补货，或把该 SKU 设为缺货预售
             - 竞品降价：对照跟价阈值给结论 —— 跟（写出新价并做利润校验）或不跟（记录价差）
@@ -244,9 +234,10 @@ workflow:
             - 评分下滑：排查近 30 天差评来源
 
             【输出要求】
-            1. 先逐条判定事件类别（category），再按上面的模板给动作。
-               动作必须是终点态，形如「改成 X」「立刻改回 Y」「保持不变」「不要跟价」「向美工提 XX 素材需求」。
-               禁止输出「重点关注」「优化一下」「加强关注」这类没有终点的表述
+            1. category 原样照抄事件里已有的值，不要自己判定；再按上面的模板给动作。
+               动作必须是终点态，形如「改成 X」「立刻改回 Y」「不要跟价」「查 XX 后再决定」「向美工提 XX 素材需求」。
+               禁止输出「重点关注」「优化一下」「加强关注」这类没有终点的表述。
+               注意「保持不变」不是万能的偷懒选项 —— 判了 P0/P1 就不能给不介入的动作
             2. 归因：只依据输入字段推断，方向跟着 role 走
             3. 优先级复核：必须给结论（维持 或 推翻）+ 理由；数据不足以判断就直接说数据不足。
                禁止无条件写「分级合理」
@@ -270,7 +261,10 @@ workflow:
 
             【硬约束】
             - 只输出 JSON
-            - 不得编造输入里不存在的字段
+            - 不得编造输入里不存在的字段。输入中没有促销、库存、销量、活动配置这些信息，
+              归因里就不许出现它们。信息不足就直说「需人工确认」，
+              不要先编一个理由再来支撑自己的结论
+            - 动作不得与 severity 矛盾：判了 P0/P1 就不能给「保持不变」这类不介入的动作
             - 输入为空时输出 {"events":[],"summary":"本轮无异常"}
         - role: user
           text: |-

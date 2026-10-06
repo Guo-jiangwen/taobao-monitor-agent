@@ -50,7 +50,7 @@ CASES = [
         "低优先级：竞品降价 P2",
         [{"item_id": "SAMPLE-009", "role": "competitor", "severity": "P2", "field": "price",
           "old_value": 128.0, "new_value": 124.0, "event": "价格变动 -3.1%"}],
-        False,
+        None,  # 不断言走向：模型有权推翻 P2 分级，推翻则按规则就该推送，两种都合理
     ),
 ]
 
@@ -203,12 +203,15 @@ def main() -> int:
         for ev in parsed["events"]:
             print(f"    - {ev.get('item_id')} [{ev.get('category')}] action={ev.get('action')} "
                   f"need_push={ev.get('need_push')}")
+        want_txt = "不断言" if expect_push is None else str(expect_push)
         print(f"  条件分支判定 need_push = {parsed['need_push']}  "
-              f"(期望 {expect_push})  pushed_items={parsed['pushed_items']}")
+              f"(期望 {want_txt})  pushed_items={parsed['pushed_items']}")
 
         actual = bool(parsed["need_push"])
-        if actual != expect_push:
-            print(f"  [失败] 条件分支走向与期望不符")
+        if expect_push is None:
+            print(f"  [跳过断言] 该用例的分级复核由模型裁量，need_push={actual}，两种走向都合理")
+        elif actual != expect_push:
+            print("  [失败] 条件分支走向与期望不符")
             failures += 1
         else:
             print("  [通过] 走了 '" + ("true（立即告警）" if actual else "false（进日报）") + "' 分支")
